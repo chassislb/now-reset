@@ -79,7 +79,9 @@
       ruleBeforeResponding: "",
       resetsLog: [],
       lastTone: null,
-      lastBodyType: null
+      lastBodyType: null,
+      groqApiKey: "",
+      groqModel: "llama-3.3-70b-versatile"
     };
   }
 
@@ -105,7 +107,8 @@
     screen: "home",
     onboardIndex: 0,
     reset: null,
-    timerHandle: null
+    timerHandle: null,
+    decode: null
   };
 
   if (!state.profile.onboarded) state.screen = "onboarding";
@@ -291,6 +294,7 @@
       '<div class="reset-btn-sub">Does this deserve you?</div>' +
       '<div class="home-links">' +
       '<span class="pill-link" data-action="open-identity">My Identity</span>' +
+      '<span class="pill-link" data-action="open-decode">Decode</span>' +
       (unlocked ? '<span class="pill-link" data-action="open-patterns">Patterns</span>' : "") +
       "</div>" +
       '<div class="home-stat">Resets this week: ' + resetsThisWeek() + "</div>" +
@@ -347,6 +351,11 @@
     html += '<div class="settings-section-title">Does NOT deserve my energy</div>' + tagList("profile", "energyNotWorthy", p.energyNotWorthy, { placeholder: "add one" });
     html += '<div class="settings-section-title">My rule before I respond</div>' + textField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "");
 
+    html += '<div class="settings-section-title">Decode (AI)</div>' +
+      '<p class="field-hint">Free API key from console.groq.com/keys — stored only on this device.</p>' +
+      textField("profile", "groqApiKey", p.groqApiKey, "gsk_...") +
+      '<div style="margin-top:10px">' + textField("profile", "groqModel", p.groqModel, "llama-3.3-70b-versatile") + "</div>";
+
     html += '<div class="settings-section-title">Data</div>' +
       '<button class="btn btn-danger" data-action="clear-data">Erase all my data on this device</button>';
 
@@ -388,6 +397,119 @@
 
     html += '<p class="step-sub">Total resets logged: ' + log.length + "</p></div>";
     return html;
+  }
+
+  // ---------- DECODE (AI-assisted, for bigger layered situations) ----------
+
+  function buildDecodeSystemPrompt(p) {
+    var lines = [
+      "You are the grounding assistant inside a personal app called SHIFT, built for exactly one person. You are not a general chatbot.",
+      "Your job: help them decode a complex, emotionally loaded situation. Separate observable facts from interpretation/story, identify what is actually within their control, and reconnect them to the values, boundaries, and identity they defined for themselves below. Push toward a clear, deliberate decision.",
+      "Hard rules:",
+      "- Keep every reply short: a few tight sentences, rarely a short paragraph. Never long essays.",
+      "- No reassurance loops or generic validation phrases repeated over and over. One brief acknowledgment at most, then move to substance.",
+      "- Ground responses in THEIR stated values/boundaries/identity below, referencing them directly, not generic advice.",
+      "- Explicitly separate: what happened (facts) vs. what they're interpreting or assuming; what is in their control vs. not; which of their own stated values or boundaries is actually at stake.",
+      "- Push toward clarity and a decision, not endless exploration. End most replies with either a sharp question or a suggested next step.",
+      "- Never diagnose any person, including third parties they describe, and never give clinical/medical advice.",
+      "- If they describe a real, current safety threat to themselves, name that plainly once and suggest contacting local emergency services or a crisis line, briefly, without lecturing.",
+      "",
+      "THEIR PROFILE:",
+      "Identity: " + (p.identitySentence || "—"),
+      "Roles: " + (p.roles.map(function (r) { return r.role + ": " + r.descriptor; }).join("; ") || "—"),
+      "Values: " + (p.values.join(", ") || "—"),
+      "Non-negotiables: " + (p.nonNegotiables.join(", ") || "—"),
+      "Boundaries: " + (p.boundaries.join(", ") || "—"),
+      "Deserves their energy: " + (p.energyWorthy.join(", ") || "—"),
+      "Does NOT deserve their energy: " + (p.energyNotWorthy.join(", ") || "—"),
+      "Their rule before responding to anything that stings: " + (p.ruleBeforeResponding || "—"),
+      "Old pattern they're leaving behind: " + (p.oldPattern || "—") + " → New pattern they want: " + (p.newPattern || "—")
+    ];
+    return lines.join("\n");
+  }
+
+  function openDecode() {
+    if (!state.decode) state.decode = { messages: [], loading: false, error: null, input: "" };
+    state.screen = "decode";
+    render();
+  }
+
+  function sendDecodeMessage(text) {
+    var d = state.decode;
+    d.messages.push({ role: "user", content: text });
+    d.loading = true;
+    d.error = null;
+    render();
+
+    var apiMessages = [{ role: "system", content: buildDecodeSystemPrompt(state.profile) }].concat(
+      d.messages.map(function (m) { return { role: m.role, content: m.content }; })
+    );
+
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + state.profile.groqApiKey
+      },
+      body: JSON.stringify({
+        model: state.profile.groqModel || "llama-3.3-70b-versatile",
+        messages: apiMessages,
+        temperature: 0.6,
+        max_tokens: 400
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (t) {
+            throw new Error("API error " + res.status + ": " + t.slice(0, 200));
+          });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        d.messages.push({ role: "assistant", content: reply || "(no response)" });
+        d.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        d.loading = false;
+        d.error = err.message || "Something went wrong reaching Groq.";
+        render();
+      });
+  }
+
+  function renderDecode() {
+    var p = state.profile;
+    var d = state.decode;
+    if (!p.groqApiKey) {
+      return '<div class="screen">' +
+        '<div class="topbar"><button class="iconbtn" data-action="go-home">←</button><span class="app-name">DECODE</span><button class="iconbtn" data-action="open-settings">⚙</button></div>' +
+        '<div class="empty-state">Add a free Groq API key in Settings to use Decode.<br><br>Get one at console.groq.com/keys</div>' +
+        "</div>";
+    }
+    var html = '<div class="screen">' +
+      '<div class="topbar"><button class="iconbtn" data-action="go-home">←</button><span class="app-name">DECODE</span><button class="iconbtn" data-action="decode-new">New</button></div>';
+
+    if (!d.messages.length) {
+      html += '<p class="step-sub">Write out the situation. As much as you need. I\'ll help you decode it against what you\'ve already said matters to you.</p>';
+    }
+
+    html += '<div class="chat-messages">';
+    d.messages.forEach(function (m) {
+      html += '<div class="chat-bubble ' + m.role + '">' + esc(m.content).replace(/\n/g, "<br>") + "</div>";
+    });
+    if (d.loading) html += '<div class="chat-bubble assistant loading">…</div>';
+    html += "</div>";
+
+    if (d.error) html += '<div class="warn-banner">' + esc(d.error) + "</div>";
+
+    html += '<div class="chat-input-row">' +
+      '<textarea rows="2" id="decode-input" placeholder="Type here…">' + esc(d.input || "") + "</textarea>" +
+      '<button class="addbtn" data-action="decode-send" ' + (d.loading ? "disabled" : "") + ">↑</button>" +
+      "</div>";
+
+    return html + "</div>";
   }
 
   // ---------- RESET FLOW ----------
@@ -615,6 +737,7 @@
     else if (state.screen === "identity") app.innerHTML = renderIdentity();
     else if (state.screen === "settings") app.innerHTML = renderSettings();
     else if (state.screen === "patterns") app.innerHTML = renderPatterns();
+    else if (state.screen === "decode") app.innerHTML = renderDecode();
     else if (state.screen === "reset") {
       app.innerHTML = renderReset();
       if (state.reset && state.reset.step === "body") startBodyTimer();
@@ -662,6 +785,18 @@
       state.screen = "identity"; render();
     } else if (action === "open-patterns") {
       state.screen = "patterns"; render();
+    } else if (action === "open-decode") {
+      openDecode();
+    } else if (action === "decode-new") {
+      state.decode = { messages: [], loading: false, error: null, input: "" };
+      render();
+    } else if (action === "decode-send") {
+      var ta = document.getElementById("decode-input");
+      var text = ta ? ta.value.trim() : "";
+      if (text && !state.decode.loading) {
+        state.decode.input = "";
+        sendDecodeMessage(text);
+      }
     } else if (action === "clear-data") {
       if (window.confirm("This permanently erases everything on this device. Continue?")) {
         localStorage.removeItem(STORAGE_KEY);
@@ -784,6 +919,10 @@
 
   document.body.addEventListener("input", function (e) {
     var t = e.target;
+    if (t.id === "decode-input" && state.decode) {
+      state.decode.input = t.value;
+      return;
+    }
     if (!t.dataset || !t.dataset.action) return;
     if (t.dataset.action === "update-role") {
       state.profile.roles[Number(t.dataset.index)].descriptor = t.value;
@@ -810,6 +949,15 @@
   });
 
   document.body.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && e.target.id === "decode-input") {
+      e.preventDefault();
+      var text = e.target.value.trim();
+      if (text && state.decode && !state.decode.loading) {
+        state.decode.input = "";
+        sendDecodeMessage(text);
+      }
+      return;
+    }
     if (e.key === "Enter" && e.target.classList && e.target.classList.contains("tag-input-field")) {
       e.preventDefault();
       var scope = e.target.dataset.scope, field = e.target.dataset.field;
