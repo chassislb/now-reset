@@ -46,7 +46,7 @@
     energy: { direct: "Answer honestly. Not how it feels — what it actually is.", warm: "Be honest with yourself here — feelings aren't the same as facts.", gentle: "It's okay to feel something and still decide it doesn't need your energy." },
     control: { direct: "Own your column. Let go of theirs.", warm: "Focus on your column — the other one was never yours to carry.", gentle: "You only ever have to manage your own column. The rest isn't yours to hold." },
     body: { direct: "One reset. Then move.", warm: "Just this one thing — then we keep going.", gentle: "Just a moment for your body before we continue." },
-    identity: { direct: "Not who you were when this happened. Who you decided to be.", warm: "Remember who you're building yourself into — not just how you feel right now.", gentle: "You get to choose to respond as the person you're becoming, not the one who got hurt." }
+    identity: { direct: "Not who you were when this happened. Who you decided to be. Their read of you isn't evidence.", warm: "Remember who you're building yourself into — their opinion of you doesn't get a vote in that.", gentle: "You get to choose to respond as the person you're becoming. What they think of you isn't proof of anything." }
   };
 
   var PATTERN_UNLOCK = 10;
@@ -162,8 +162,32 @@
     reset: null,
     timerHandle: null,
     decode: null,
-    mic: { recognition: null, targetId: null }
+    mic: { recognition: null, targetId: null },
+    anchorOffset: 0
   };
+
+  function buildAnchorPool(p) {
+    var pool = [];
+    if (p.identitySentence) pool.push(p.identitySentence);
+    p.values.forEach(function (v) { pool.push("You value " + v + "."); });
+    p.nonNegotiables.forEach(function (v) { pool.push("Non-negotiable: " + v + "."); });
+    p.roles.forEach(function (r) { if (r.descriptor) pool.push(r.role + ": " + r.descriptor); });
+    if (p.ruleBeforeResponding) pool.push("Your rule: " + p.ruleBeforeResponding);
+    if (p.newPattern) pool.push("You're building: " + p.newPattern);
+    return pool;
+  }
+
+  function dayOfYear(d) {
+    var start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d - start) / 86400000);
+  }
+
+  function getAnchorText() {
+    var pool = buildAnchorPool(state.profile);
+    if (!pool.length) return "Add your values and identity in Settings to see your daily anchor here.";
+    var idx = (dayOfYear(new Date()) + (state.anchorOffset || 0)) % pool.length;
+    return pool[idx];
+  }
 
   if (!state.profile.onboarded) state.screen = "onboarding";
 
@@ -345,6 +369,7 @@
       '<div class="topbar"><span class="app-name">SHIFT</span><button class="iconbtn" data-action="open-settings">⚙</button></div>' +
       '<div class="home-hero">' +
       '<div><div class="home-title">SHIFT</div><p class="home-tagline">Protect your energy. Return to yourself.</p></div>' +
+      '<div class="anchor-card"><button class="iconbtn" data-action="anchor-shuffle">↻</button><div class="anchor-label">TODAY</div><div class="anchor-text">' + esc(getAnchorText()) + "</div></div>" +
       '<button class="reset-btn" data-action="start-reset">RESET</button>' +
       '<div class="reset-btn-sub">Does this deserve you?</div>' +
       '<div class="home-links">' +
@@ -669,6 +694,7 @@
       body = '<h1 class="step-title">2. Energy check</h1>' +
         '<p class="step-sub">Does this actually deserve your energy?</p>' +
         '<p class="field-hint">Does it affect your values, responsibilities, relationships, safety, work, money, reputation — or require a real boundary? Hurt feelings alone aren\'t proof it needs action.</p>' +
+        '<p class="field-hint">The sting is information about a boundary or value — not a signal to run from it or fix it immediately.</p>' +
         '<p class="step-sub">' + TONE_COPY.energy[tone] + "</p>" +
         '<div class="choice-list">' +
         [["yes", "Yes"], ["not-now", "Not now"], ["no", "No"]].map(function (o) {
@@ -843,6 +869,11 @@
       state.screen = "patterns"; render();
     } else if (action === "mic-toggle") {
       toggleMic(t.dataset.target);
+    } else if (action === "anchor-shuffle") {
+      var pool = buildAnchorPool(state.profile);
+      state.anchorOffset = (state.anchorOffset || 0) + 1;
+      if (pool.length) state.anchorOffset = state.anchorOffset % pool.length;
+      render();
     } else if (action === "open-decode") {
       openDecode();
     } else if (action === "decode-new") {
