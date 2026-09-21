@@ -72,13 +72,21 @@
 
   function toggleMic(targetId) {
     if (state.mic.recognition && state.mic.targetId === targetId) {
+      state.mic.manualStop = true;
       state.mic.recognition.stop();
       return;
     }
-    if (state.mic.recognition) state.mic.recognition.stop();
+    if (state.mic.recognition) {
+      state.mic.manualStop = true;
+      state.mic.recognition.stop();
+    }
     var el = document.getElementById(targetId);
     if (!el) return;
-    var baseText = el.value;
+    state.mic.manualStop = false;
+    startMicSession(targetId, el, el.value);
+  }
+
+  function startMicSession(targetId, el, priorText) {
     var rec = new SpeechRecognitionCtor();
     rec.lang = navigator.language || "en-US";
     rec.continuous = true;
@@ -87,18 +95,33 @@
       document.querySelectorAll('.mic-btn[data-target="' + targetId + '"]').forEach(function (b) { b.classList.add("listening"); });
     };
     rec.onresult = function (e) {
+      // Rebuild from scratch every event instead of trusting resultIndex across
+      // events: Android's recognizer restarts sessions frequently and can
+      // redeliver already-final results, which caused duplicated/garbled text.
       var finalText = "";
       var interim = "";
-      for (var i = e.resultIndex; i < e.results.length; i++) {
+      for (var i = 0; i < e.results.length; i++) {
         var transcript = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += transcript;
+        if (e.results[i].isFinal) finalText += (finalText ? " " : "") + transcript.trim();
         else interim += transcript;
       }
-      if (finalText) baseText = (baseText ? baseText.replace(/\s+$/, "") + " " : "") + finalText.trim();
-      setFieldValue(el, baseText + (interim ? (baseText ? " " : "") + interim : ""));
+      var base = priorText ? priorText.replace(/\s+$/, "") : "";
+      if (finalText) base = (base ? base + " " : "") + finalText;
+      setFieldValue(el, base + (interim ? (base ? " " : "") + interim : ""));
     };
-    rec.onerror = function () { stopMic(); };
-    rec.onend = function () { stopMic(); };
+    rec.onerror = function (e) {
+      if (e.error !== "no-speech" && e.error !== "aborted") state.mic.manualStop = true;
+    };
+    rec.onend = function () {
+      if (state.mic.manualStop || state.mic.targetId !== targetId) {
+        stopMic();
+        return;
+      }
+      // Android's recognizer times out after a few seconds of silence even
+      // with continuous:true. Seamlessly resume instead of stopping on the
+      // user, carrying forward whatever's already in the field.
+      startMicSession(targetId, el, el.value);
+    };
     state.mic.recognition = rec;
     state.mic.targetId = targetId;
     rec.start();
@@ -180,7 +203,7 @@
     reset: null,
     timerHandle: null,
     decode: null,
-    mic: { recognition: null, targetId: null },
+    mic: { recognition: null, targetId: null, manualStop: false },
     anchorOffset: 0
   };
 
