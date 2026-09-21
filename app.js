@@ -134,7 +134,7 @@
       lastTone: null,
       lastBodyType: null,
       groqApiKey: "",
-      groqModel: "llama-3.3-70b-versatile"
+      groqModel: "openai/gpt-oss-20b"
     };
   }
 
@@ -441,7 +441,7 @@
     html += '<div class="settings-section-title">Decode (AI)</div>' +
       '<p class="field-hint">Free API key from console.groq.com/keys — stored only on this device.</p>' +
       textField("profile", "groqApiKey", p.groqApiKey, "gsk_...") +
-      '<div style="margin-top:10px">' + textField("profile", "groqModel", p.groqModel, "llama-3.3-70b-versatile") + "</div>";
+      '<div style="margin-top:10px">' + textField("profile", "groqModel", p.groqModel, "openai/gpt-oss-20b") + "</div>";
 
     html += '<div class="settings-section-title">Backup</div>' +
       '<p class="field-hint">Move your values to another device (like your phone) without retyping.</p>' +
@@ -547,13 +547,14 @@
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.groqApiKey },
       body: JSON.stringify({
-        model: p.groqModel || "llama-3.3-70b-versatile",
+        model: p.groqModel || "openai/gpt-oss-20b",
+        reasoning_effort: "low",
         messages: [
           { role: "system", content: buildScriptSystemPrompt(p) },
           { role: "user", content: userMsg }
         ],
         temperature: 0.5,
-        max_tokens: 150
+        max_tokens: 600
       })
     })
       .then(function (res) {
@@ -599,10 +600,11 @@
         "Authorization": "Bearer " + state.profile.groqApiKey
       },
       body: JSON.stringify({
-        model: state.profile.groqModel || "llama-3.3-70b-versatile",
+        model: state.profile.groqModel || "openai/gpt-oss-20b",
+        reasoning_effort: "low",
         messages: apiMessages,
         temperature: 0.6,
-        max_tokens: 400
+        max_tokens: 900
       })
     })
       .then(function (res) {
