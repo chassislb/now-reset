@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.chassislb.shift",
+    "sha256_cert_fingerprints": [
+      "2B:B9:F7:72:92:A8:AB:3A:FA:43:A6:3C:E7:14:B8:01:01:AB:E6:70:D2:23:A4:75:17:79:82:0F:1C:F5:A3:BF"
+    ]
+  }
+}]
