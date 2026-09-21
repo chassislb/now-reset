@@ -195,6 +195,7 @@
     reset: null,
     timerHandle: null,
     decode: null,
+    dayCheckin: null,
     mic: { recognition: null, targetId: null },
     anchorOffset: 0
   };
@@ -405,6 +406,7 @@
       '<div class="home-top">' +
       '<div class="home-title">SHIFT</div><p class="home-tagline">Protect your energy. Return to yourself.</p>' +
       '<div class="anchor-card"><button class="iconbtn" data-action="anchor-shuffle">↻</button><div class="anchor-label">TODAY</div><div class="anchor-text">' + esc(getAnchorText()) + "</div></div>" +
+      '<span class="pill-link" data-action="open-daycheckin">Start My Day</span>' +
       "</div>" +
       '<div class="home-middle">' +
       '<button class="reset-btn" data-action="start-reset">RESET</button>' +
@@ -687,6 +689,114 @@
         saveProfile();
       })
       .catch(function () {});
+  }
+
+  function buildDayCheckinSystemPrompt(p) {
+    var lines = [
+      "You are a daily grounding check-in assistant inside SHIFT, for exactly one person. Same voice as the rest of this app: warm, direct, human — not a hype coach, not clinical.",
+      "This is different from processing a specific situation: your job is to help them land on what TODAY actually needs from them, grounded in their real state right now (rested, restless, anxious, motivated, burnt out) — not generic productivity advice.",
+      "Ask at most one clarifying question if genuinely needed, then land on 2 to 4 concrete, realistic priorities for today. This is not a full schedule or task list — keep it short.",
+      "They often work long hours online building something of their own that isn't paying off yet, which can make them restless or anxious about 'not doing enough.' If they sound restless, anxious, or burnt out, it is NOT your job to just push more hustle. Explicitly give permission to rest when that's what's actually needed — say it plainly, e.g. \"Today can just be rest and a short walk. That counts.\" Rest is a legitimate priority, not a failure, when their own state calls for it.",
+      "Ground suggestions in what they've said deserves their energy and their actual values/identity below — not generic wellness advice.",
+      "No markdown, no bullet symbols, no headers — plain conversational prose. State the final priorities in plain language within the sentence flow (e.g. \"Today: a 20-minute workout, eat an actual meal, and one hour on the project — that's enough.\").",
+      "Keep replies short: a few sentences.",
+      "Never diagnose or give clinical/medical advice.",
+      "",
+      "THEIR PROFILE:",
+      "Identity: " + (p.identitySentence || "—"),
+      "Roles: " + (p.roles.map(function (r) { return r.role + ": " + r.descriptor; }).join("; ") || "—"),
+      "Values: " + (p.values.join(", ") || "—"),
+      "Deserves their energy: " + (p.energyWorthy.join(", ") || "—"),
+      "Does NOT deserve their energy: " + (p.energyNotWorthy.join(", ") || "—"),
+      "Old pattern they're leaving behind: " + (p.oldPattern || "—") + " → New pattern they want: " + (p.newPattern || "—")
+    ];
+    return lines.join("\n") + buildDecodeHistoryBlock(p);
+  }
+
+  function openDayCheckin() {
+    if (!state.dayCheckin) state.dayCheckin = { messages: [], loading: false, error: null, input: "" };
+    state.screen = "daycheckin";
+    render();
+  }
+
+  function sendDayCheckinMessage(text) {
+    var d = state.dayCheckin;
+    d.messages.push({ role: "user", content: text });
+    d.loading = true;
+    d.error = null;
+    render();
+
+    var apiMessages = [{ role: "system", content: buildDayCheckinSystemPrompt(state.profile) }].concat(
+      d.messages.map(function (m) { return { role: m.role, content: m.content }; })
+    );
+
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + state.profile.groqApiKey
+      },
+      body: JSON.stringify({
+        model: state.profile.groqModel || "openai/gpt-oss-20b",
+        reasoning_effort: "low",
+        messages: apiMessages,
+        temperature: 0.6,
+        max_tokens: 700
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (t) {
+            throw new Error(friendlyApiError(res.status, t));
+          });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        d.messages.push({ role: "assistant", content: reply || "(no response)" });
+        d.loading = false;
+        render();
+      })
+      .catch(function (err) {
+        d.loading = false;
+        d.error = err.message || "Something went wrong reaching Groq.";
+        render();
+      });
+  }
+
+  function renderDayCheckin() {
+    var p = state.profile;
+    var d = state.dayCheckin;
+    if (!p.groqApiKey) {
+      return '<div class="screen">' +
+        '<div class="topbar"><button class="iconbtn" data-action="go-home">←</button><span class="app-name">START MY DAY</span><button class="iconbtn" data-action="open-settings">⚙</button></div>' +
+        '<div class="empty-state">Add a free Groq API key in Settings to use this.<br><br>Get one at console.groq.com/keys</div>' +
+        "</div>";
+    }
+    var html = '<div class="screen">' +
+      '<div class="topbar"><button class="iconbtn" data-action="go-home">←</button><span class="app-name">START MY DAY</span><button class="iconbtn" data-action="daycheckin-new">New</button></div>';
+
+    if (!d.messages.length) {
+      html += '<p class="step-sub">How are you waking up today, and what do you think you need to do? I\'ll help you land on what today actually needs.</p>';
+    }
+
+    html += '<div class="chat-messages">';
+    d.messages.forEach(function (m) {
+      html += '<div class="chat-bubble ' + m.role + '">' + esc(m.content).replace(/\n/g, "<br>") + "</div>";
+    });
+    if (d.loading) html += '<div class="chat-bubble assistant loading">…</div>';
+    html += "</div>";
+
+    if (d.error) html += '<div class="warn-banner">' + esc(d.error) + "</div>";
+
+    html += '<div class="chat-input-row">' +
+      '<textarea rows="2" id="daycheckin-input" placeholder="Type here…">' + esc(d.input || "") + "</textarea>" +
+      micButton("daycheckin-input") +
+      '<button class="addbtn" data-action="daycheckin-send" ' + (d.loading ? "disabled" : "") + ">↑</button>" +
+      "</div>";
+
+    return html + "</div>";
   }
 
   function sendDecodeMessage(text) {
@@ -1010,6 +1120,7 @@
     else if (state.screen === "settings") app.innerHTML = renderSettings();
     else if (state.screen === "patterns") app.innerHTML = renderPatterns();
     else if (state.screen === "decode") app.innerHTML = renderDecode();
+    else if (state.screen === "daycheckin") app.innerHTML = renderDayCheckin();
     else if (state.screen === "reset") {
       app.innerHTML = renderReset();
       if (state.reset && state.reset.step === "body") startBodyTimer();
@@ -1052,6 +1163,8 @@
     } else if (action === "go-home") {
       if (state.screen === "decode" && state.decode) {
         summarizeDecodeSession(state.decode.messages, state.profile);
+      } else if (state.screen === "daycheckin" && state.dayCheckin) {
+        summarizeDecodeSession(state.dayCheckin.messages, state.profile);
       }
       state.screen = "home"; render();
     } else if (action === "open-settings") {
@@ -1079,6 +1192,19 @@
       if (text && !state.decode.loading) {
         state.decode.input = "";
         sendDecodeMessage(text);
+      }
+    } else if (action === "open-daycheckin") {
+      openDayCheckin();
+    } else if (action === "daycheckin-new") {
+      summarizeDecodeSession(state.dayCheckin.messages, state.profile);
+      state.dayCheckin = { messages: [], loading: false, error: null, input: "" };
+      render();
+    } else if (action === "daycheckin-send") {
+      var dayTa = document.getElementById("daycheckin-input");
+      var dayText = dayTa ? dayTa.value.trim() : "";
+      if (dayText && !state.dayCheckin.loading) {
+        state.dayCheckin.input = "";
+        sendDayCheckinMessage(dayText);
       }
     } else if (action === "export-data") {
       var exportJson = JSON.stringify(state.profile);
@@ -1240,6 +1366,10 @@
       state.decode.input = t.value;
       return;
     }
+    if (t.id === "daycheckin-input" && state.dayCheckin) {
+      state.dayCheckin.input = t.value;
+      return;
+    }
     if (!t.dataset || !t.dataset.action) return;
     if (t.dataset.action === "update-role") {
       state.profile.roles[Number(t.dataset.index)].descriptor = t.value;
@@ -1272,6 +1402,15 @@
       if (text && state.decode && !state.decode.loading) {
         state.decode.input = "";
         sendDecodeMessage(text);
+      }
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && e.target.id === "daycheckin-input") {
+      e.preventDefault();
+      var dayText = e.target.value.trim();
+      if (dayText && state.dayCheckin && !state.dayCheckin.loading) {
+        state.dayCheckin.input = "";
+        sendDayCheckinMessage(dayText);
       }
       return;
     }
