@@ -42,6 +42,9 @@ html, body {
   margin: 0 auto;
   width: 100%;
 }
+.screen:has(.nav-row) {
+  padding-bottom: calc(110px + var(--safe-bottom));
+}
 
 .topbar {
   display: flex;
@@ -287,8 +290,16 @@ textarea:focus, input[type=text]:focus { outline: 2px solid var(--accent-dim); }
 .nav-row {
   display: flex;
   gap: 10px;
-  margin-top: auto;
-  padding-top: 18px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 520px;
+  margin: 0 auto;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 14px 20px calc(14px + var(--safe-bottom));
+  z-index: 10;
 }
 .nav-row .btn { flex: 1; }
 

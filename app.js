@@ -272,6 +272,7 @@
         '<p class="step-sub" style="max-width:340px">This app exists to help you stop giving your energy to things that don\'t deserve it, and come back to who you\'ve decided to be.</p>' +
         '<p class="step-sub" style="max-width:340px">First, let\'s define that person. This takes about 5 minutes, once. You can edit it anytime.</p>' +
         '<button class="btn btn-primary" style="width:220px" data-action="onboard-next">Start</button>' +
+        '<span class="pill-link" data-action="import-data" style="margin-top:4px">Already set up on another device? Import</span>' +
         "</div>";
       return '<div class="screen">' + body + "</div>";
     }
@@ -984,6 +985,7 @@
           state.profile = Object.assign(defaultProfile(), parsed);
           state.profile.onboarded = true;
           saveProfile();
+          state.screen = "home";
           render();
           window.alert("Imported.");
         } catch (e) {
