@@ -25,8 +25,9 @@ self.addEventListener("activate", function (e) {
 
 self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
+  var freshRequest = new Request(e.request.url, { cache: "no-cache" });
   e.respondWith(
-    fetch(e.request)
+    fetch(freshRequest)
       .then(function (res) {
         if (res && res.status === 200) {
           var copy = res.clone();
