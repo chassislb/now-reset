@@ -157,7 +157,8 @@
       lastTone: null,
       lastBodyType: null,
       groqApiKey: "",
-      groqModel: "openai/gpt-oss-20b"
+      groqModel: "openai/gpt-oss-20b",
+      decodeHistory: []
     };
   }
 
@@ -406,7 +407,7 @@
   // ---------- HOME ----------
 
   function renderHome() {
-    var unlocked = state.profile.resetsLog.length >= PATTERN_UNLOCK;
+    var unlocked = state.profile.resetsLog.length >= PATTERN_UNLOCK || state.profile.decodeHistory.length >= 1;
     return '<div class="screen">' +
       '<div class="topbar"><span class="app-name">SHIFT</span><button class="iconbtn" data-action="open-settings">⚙</button></div>' +
       '<div class="home-hero">' +
@@ -521,25 +522,39 @@
     var html = '<div class="screen">' +
       '<div class="topbar"><button class="iconbtn" data-action="go-home">←</button><span class="app-name">PATTERNS</span><span></span></div>';
 
-    if (!cats.length) {
-      html += '<div class="empty-state">No patterns yet.</div></div>';
-      return html;
+    if (cats.length) {
+      var top = cats[0];
+      var topDecisions = byCat[top].decisions;
+      var topDecisionId = Object.keys(topDecisions).sort(function (a, b) { return topDecisions[b] - topDecisions[a]; })[0];
+      var topDecisionLabel = (DECISION_OPTIONS.find(function (d) { return d.id === topDecisionId; }) || {}).label || topDecisionId;
+
+      html += '<div class="insight-card">You\'ve flagged "' + esc(top) + '" ' + byCat[top].count + " time" + (byCat[top].count === 1 ? "" : "s") + ". " +
+        topDecisions[topDecisionId] + " of those times you chose “" + esc(topDecisionLabel) + "”. This may be worth noticing.</div>";
+
+      html += '<div class="card">' + cats.map(function (c) {
+        return '<div class="patterns-row"><span class="patterns-cat">' + esc(c) + '</span><span class="patterns-count">' + byCat[c].count + "</span></div>";
+      }).join("") + "</div>";
+
+      html += '<p class="step-sub">Total resets logged: ' + log.length + "</p>";
     }
 
-    var top = cats[0];
-    var topDecisions = byCat[top].decisions;
-    var topDecisionId = Object.keys(topDecisions).sort(function (a, b) { return topDecisions[b] - topDecisions[a]; })[0];
-    var topDecisionLabel = (DECISION_OPTIONS.find(function (d) { return d.id === topDecisionId; }) || {}).label || topDecisionId;
+    var history = state.profile.decodeHistory || [];
+    if (history.length) {
+      html += '<div class="settings-section-title" style="margin-top:' + (cats.length ? "8px" : "0") + '">Growth (from Decode)</div>';
+      html += '<div class="card">' + history.slice().reverse().map(function (h) {
+        var daysAgo = Math.round((Date.now() - h.ts) / 86400000);
+        var when = daysAgo <= 0 ? "Today" : daysAgo === 1 ? "1 day ago" : daysAgo + " days ago";
+        return '<div class="patterns-row" style="flex-direction:column;align-items:flex-start;gap:4px">' +
+          '<span class="field-label" style="margin:0">' + when + "</span>" +
+          '<span style="font-size:14.5px;line-height:1.4">' + esc(h.summary) + "</span></div>";
+      }).join("") + "</div>";
+    }
 
-    html += '<div class="insight-card">You\'ve flagged "' + esc(top) + '" ' + byCat[top].count + " time" + (byCat[top].count === 1 ? "" : "s") + ". " +
-      topDecisions[topDecisionId] + " of those times you chose “" + esc(topDecisionLabel) + "”. This may be worth noticing.</div>";
+    if (!cats.length && !history.length) {
+      html += '<div class="empty-state">No patterns yet.</div>';
+    }
 
-    html += '<div class="card">' + cats.map(function (c) {
-      return '<div class="patterns-row"><span class="patterns-cat">' + esc(c) + '</span><span class="patterns-count">' + byCat[c].count + "</span></div>";
-    }).join("") + "</div>";
-
-    html += '<p class="step-sub">Total resets logged: ' + log.length + "</p></div>";
-    return html;
+    return html + "</div>";
   }
 
   // ---------- DECODE (AI-assisted, for bigger layered situations) ----------
@@ -567,6 +582,18 @@
       "Their rule before responding to anything that stings: " + (p.ruleBeforeResponding || "—"),
       "Old pattern they're leaving behind: " + (p.oldPattern || "—") + " → New pattern they want: " + (p.newPattern || "—")
     ];
+    return lines.join("\n");
+  }
+
+  function buildDecodeHistoryBlock(p) {
+    if (!p.decodeHistory || !p.decodeHistory.length) return "";
+    var recent = p.decodeHistory.slice(-15).reverse();
+    var lines = ["", "PATTERNS FROM PAST CONVERSATIONS WITH THEM (most recent first — reference these naturally when relevant, e.g. \"you've mentioned this pattern before\" or noting if something keeps recurring unchanged; don't force it into every reply):"];
+    recent.forEach(function (h) {
+      var daysAgo = Math.round((Date.now() - h.ts) / 86400000);
+      var when = daysAgo <= 0 ? "today" : daysAgo === 1 ? "1 day ago" : daysAgo + " days ago";
+      lines.push("- (" + when + ") " + h.summary);
+    });
     return lines.join("\n");
   }
 
@@ -633,6 +660,36 @@
     render();
   }
 
+  function summarizeDecodeSession(messages, profile) {
+    if (!messages || messages.length < 2 || !profile.groqApiKey) return;
+    var transcript = messages.map(function (m) { return (m.role === "user" ? "Them: " : "Assistant: ") + m.content; }).join("\n");
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + profile.groqApiKey },
+      body: JSON.stringify({
+        model: profile.groqModel || "openai/gpt-oss-20b",
+        reasoning_effort: "low",
+        messages: [
+          { role: "system", content: "Summarize the CORE recurring pattern or struggle in this conversation in one short sentence, under 15 words, second person (\"You...\"), naming the theme (e.g. what triggered it, what they tend to do) not the surface details. No markdown, no quotes around it, just the sentence." },
+          { role: "user", content: transcript.slice(-4000) }
+        ],
+        temperature: 0.3,
+        max_tokens: 300
+      })
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        var summary = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!summary) return;
+        summary = summary.trim();
+        if (!summary) return;
+        state.profile.decodeHistory.push({ ts: Date.now(), summary: summary });
+        if (state.profile.decodeHistory.length > 60) state.profile.decodeHistory = state.profile.decodeHistory.slice(-60);
+        saveProfile();
+      })
+      .catch(function () {});
+  }
+
   function sendDecodeMessage(text) {
     var d = state.decode;
     d.messages.push({ role: "user", content: text });
@@ -640,7 +697,8 @@
     d.error = null;
     render();
 
-    var apiMessages = [{ role: "system", content: buildDecodeSystemPrompt(state.profile) }].concat(
+    var systemContent = buildDecodeSystemPrompt(state.profile) + buildDecodeHistoryBlock(state.profile);
+    var apiMessages = [{ role: "system", content: systemContent }].concat(
       d.messages.map(function (m) { return { role: m.role, content: m.content }; })
     );
 
@@ -993,6 +1051,9 @@
       state.screen = "home";
       render();
     } else if (action === "go-home") {
+      if (state.screen === "decode" && state.decode) {
+        summarizeDecodeSession(state.decode.messages, state.profile);
+      }
       state.screen = "home"; render();
     } else if (action === "open-settings") {
       state.screen = "settings"; render();
@@ -1010,6 +1071,7 @@
     } else if (action === "open-decode") {
       openDecode();
     } else if (action === "decode-new") {
+      summarizeDecodeSession(state.decode.messages, state.profile);
       state.decode = { messages: [], loading: false, error: null, input: "" };
       render();
     } else if (action === "decode-send") {
