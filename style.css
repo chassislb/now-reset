@@ -76,9 +76,32 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   text-align: center;
-  gap: 28px;
+  padding: 12px 0 8px;
+}
+
+.home-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding-top: 12px;
+}
+
+.home-middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.home-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 8px;
 }
 
 .home-title {
@@ -95,13 +118,13 @@ html, body {
 }
 
 .reset-btn {
-  width: 220px;
-  height: 220px;
+  width: min(280px, 62vw);
+  height: min(280px, 62vw);
   border-radius: 50%;
   border: none;
   background: radial-gradient(circle at 30% 30%, var(--accent), var(--accent-dim));
   color: #04201d;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
   letter-spacing: 2px;
   cursor: pointer;

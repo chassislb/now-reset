@@ -387,16 +387,22 @@
     return '<div class="screen">' +
       '<div class="topbar"><span class="app-name">SHIFT</span><button class="iconbtn" data-action="open-settings">⚙</button></div>' +
       '<div class="home-hero">' +
-      '<div><div class="home-title">SHIFT</div><p class="home-tagline">Protect your energy. Return to yourself.</p></div>' +
+      '<div class="home-top">' +
+      '<div class="home-title">SHIFT</div><p class="home-tagline">Protect your energy. Return to yourself.</p>' +
       '<div class="anchor-card"><button class="iconbtn" data-action="anchor-shuffle">↻</button><div class="anchor-label">TODAY</div><div class="anchor-text">' + esc(getAnchorText()) + "</div></div>" +
+      "</div>" +
+      '<div class="home-middle">' +
       '<button class="reset-btn" data-action="start-reset">RESET</button>' +
       '<div class="reset-btn-sub">Does this deserve you?</div>' +
+      "</div>" +
+      '<div class="home-bottom">' +
       '<div class="home-links">' +
       '<span class="pill-link" data-action="open-identity">My Identity</span>' +
       '<span class="pill-link" data-action="open-decode">Decode</span>' +
       (unlocked ? '<span class="pill-link" data-action="open-patterns">Patterns</span>' : "") +
       "</div>" +
       '<div class="home-stat">Resets this week: ' + resetsThisWeek() + "</div>" +
+      "</div>" +
       "</div></div>";
   }
 
