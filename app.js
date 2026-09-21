@@ -72,30 +72,27 @@
 
   function toggleMic(targetId) {
     if (state.mic.recognition && state.mic.targetId === targetId) {
-      state.mic.manualStop = true;
       state.mic.recognition.stop();
       return;
     }
-    if (state.mic.recognition) {
-      state.mic.manualStop = true;
-      state.mic.recognition.stop();
-    }
+    if (state.mic.recognition) state.mic.recognition.stop();
     var el = document.getElementById(targetId);
     if (!el) return;
-    state.mic.manualStop = false;
     startMicSession(targetId, el, el.value);
   }
 
   function startMicSession(targetId, el, priorText) {
+    // Deliberately NOT continuous. Android's continuous-mode restart
+    // behavior on this app's target devices has proven unreliable across
+    // two different carry-forward strategies, each still duplicating
+    // speech. A single non-continuous pass per tap has none of that
+    // restart machinery to go wrong: one utterance in, one clean final
+    // result out, done. Tapping the mic again continues dictating.
     var rec = new SpeechRecognitionCtor();
     rec.lang = navigator.language || "en-US";
-    rec.continuous = true;
+    rec.continuous = false;
     rec.interimResults = true;
-    // Only ever carry forward CONFIRMED final text across a restart. If we
-    // carried forward the displayed value (which can include an unconfirmed
-    // interim guess at the exact moment of restart), the next session would
-    // often re-hear and re-finalize that same tail end, duplicating it.
-    var confirmedText = priorText ? priorText.replace(/\s+$/, "") : "";
+    var base = priorText ? priorText.replace(/\s+$/, "") : "";
     rec.onstart = function () {
       document.querySelectorAll('.mic-btn[data-target="' + targetId + '"]').forEach(function (b) { b.classList.add("listening"); });
     };
@@ -107,21 +104,14 @@
         if (e.results[i].isFinal) finalText += (finalText ? " " : "") + transcript.trim();
         else interim += transcript;
       }
-      if (finalText) confirmedText = (confirmedText ? confirmedText + " " : "") + finalText;
-      setFieldValue(el, confirmedText + (interim ? (confirmedText ? " " : "") + interim : ""));
+      var display = base;
+      if (finalText) display = (display ? display + " " : "") + finalText;
+      else if (interim) display = (display ? display + " " : "") + interim;
+      setFieldValue(el, display);
     };
-    rec.onerror = function (e) {
-      if (e.error !== "no-speech" && e.error !== "aborted") state.mic.manualStop = true;
-    };
+    rec.onerror = function () {};
     rec.onend = function () {
-      if (state.mic.manualStop || state.mic.targetId !== targetId) {
-        stopMic();
-        return;
-      }
-      // Android's recognizer times out after a few seconds of silence even
-      // with continuous:true. Seamlessly resume instead of stopping on the
-      // user, carrying forward only what was actually confirmed.
-      startMicSession(targetId, el, confirmedText);
+      stopMic();
     };
     state.mic.recognition = rec;
     state.mic.targetId = targetId;
@@ -205,7 +195,7 @@
     reset: null,
     timerHandle: null,
     decode: null,
-    mic: { recognition: null, targetId: null, manualStop: false },
+    mic: { recognition: null, targetId: null },
     anchorOffset: 0
   };
 
