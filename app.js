@@ -508,6 +508,61 @@
     return lines.join("\n");
   }
 
+  var SCRIPT_DECISIONS = ["say-no", "set-boundary", "address-calmly", "practical-action"];
+
+  function buildScriptSystemPrompt(p) {
+    var profileBlock = buildDecodeSystemPrompt(p).split("THEIR PROFILE:")[1];
+    return [
+      "You write extremely short, ready-to-use scripts for one person inside an app called SHIFT.",
+      "You are not a therapist. Do not analyze, reassure, or explain. Output ONLY the exact words they could say or send.",
+      "1 to 3 sentences. First person. No preamble like \"Here's a script\" or \"You could say\" — just the words themselves.",
+      "Match the requested tone exactly: direct = blunt and short; warm = firm but kind; gentle = soft but still clear.",
+      "Let the wording reflect their stated values/boundaries below where relevant, but do not quote the values back at them explicitly.",
+      "",
+      "THEIR PROFILE:" + profileBlock
+    ].join("\n");
+  }
+
+  function requestScript() {
+    var r = state.reset, p = state.profile;
+    r.scriptLoading = true;
+    r.scriptError = null;
+    render();
+    var decisionLabel = (DECISION_OPTIONS.find(function (d) { return d.id === r.decision; }) || {}).label || r.decision;
+    var userMsg = "Situation: " + r.facts + "\nChosen path: " + decisionLabel + "\nTone: " + (r.tone || "direct");
+
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + p.groqApiKey },
+      body: JSON.stringify({
+        model: p.groqModel || "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: buildScriptSystemPrompt(p) },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.5,
+        max_tokens: 150
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (t) { throw new Error("API error " + res.status + ": " + t.slice(0, 200)); });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        r.script = (reply || "").trim();
+        r.scriptLoading = false;
+        render();
+      })
+      .catch(function (err) {
+        r.scriptLoading = false;
+        r.scriptError = err.message || "Couldn't reach Groq.";
+        render();
+      });
+  }
+
   function openDecode() {
     if (!state.decode) state.decode = { messages: [], loading: false, error: null, input: "" };
     state.screen = "decode";
@@ -616,7 +671,10 @@
       bodySecondsLeft: 0,
       identitySelected: [],
       decision: null,
-      avoidNudge: false
+      avoidNudge: false,
+      script: null,
+      scriptLoading: false,
+      scriptError: null
     };
     state.reset.bodySecondsLeft = state.reset.body.seconds;
     state.screen = "reset";
@@ -779,8 +837,18 @@
     if (r.step === "close") {
       var line = (CLOSE_LINES[r.decision] || {})[tone] || "Decision made. Move on.";
       body = '<h1 class="step-title">7. Close</h1>' +
-        '<div class="close-line">' + esc(line) + "</div>" +
-        '<button class="btn btn-primary" data-action="finish-reset">Done</button>';
+        '<div class="close-line">' + esc(line) + "</div>";
+      if (SCRIPT_DECISIONS.indexOf(r.decision) > -1 && p.groqApiKey) {
+        if (r.script) {
+          body += '<div class="chat-bubble assistant">' + esc(r.script).replace(/\n/g, "<br>") + "</div>";
+        } else if (r.scriptLoading) {
+          body += '<div class="chat-bubble assistant loading">…</div>';
+        } else {
+          body += '<button class="btn btn-secondary" data-action="get-script">Help me word this</button>';
+        }
+        if (r.scriptError) body += '<div class="warn-banner">' + esc(r.scriptError) + "</div>";
+      }
+      body += '<button class="btn btn-primary" data-action="finish-reset">Done</button>';
       return '<div class="screen">' + body + "</div>";
     }
 
@@ -1001,6 +1069,8 @@
       state.reset.avoidNudge = false;
       state.reset.step = "close";
       render();
+    } else if (action === "get-script") {
+      requestScript();
     } else if (action === "finish-reset") {
       endReset(true);
     }
