@@ -327,21 +327,21 @@
     } else if (step === "traps-2") {
       body =
         '<h1 class="step-title">A little deeper</h1>' +
-        '<div class="section-block"><div class="field-label">Whose opinion do you give the most power to?</div>' + textField("profile", "whoseOpinion", p.whoseOpinion, "optional") + "</div>" +
+        '<div class="section-block"><div class="field-label">Whose opinion do you give the most power to?</div>' + textareaField("profile", "whoseOpinion", p.whoseOpinion, "optional", 3) + "</div>" +
         '<div class="section-block"><div class="field-label">The story you tell yourself when someone disrespects you</div>' + textareaField("profile", "storyWhenDisrespected", p.storyWhenDisrespected, "optional", 2) + "</div>";
     } else if (step === "energy") {
       body =
         '<h1 class="step-title">What deserves your energy</h1>' +
         '<div class="section-block"><div class="field-label">What actually deserves your energy right now</div>' + tagList("profile", "energyWorthy", p.energyWorthy, { placeholder: "e.g. my health, my work, my kids" }) + "</div>" +
         '<div class="section-block"><div class="field-label">What does NOT deserve your energy, even if it feels urgent</div>' + tagList("profile", "energyNotWorthy", p.energyNotWorthy, { placeholder: "e.g. other people's opinions of me" }) + "</div>" +
-        '<div class="section-block"><div class="field-label">A decision-worthy problem — one that genuinely needs action</div>' + textField("profile", "decisionWorthyExample", p.decisionWorthyExample, "optional") + "</div>";
+        '<div class="section-block"><div class="field-label">A decision-worthy problem — one that genuinely needs action</div>' + textareaField("profile", "decisionWorthyExample", p.decisionWorthyExample, "optional", 3) + "</div>";
     } else if (step === "rules") {
       body =
         '<h1 class="step-title">Your rules for deciding</h1>' +
-        '<div class="section-block"><div class="field-label">When activated, what do you do that you regret later?</div>' + textField("profile", "regretAction", p.regretAction, "e.g. send the text immediately") + "</div>" +
-        '<div class="section-block"><div class="field-label">What\'s true 24 hours later that wasn\'t obvious in the moment?</div>' + textField("profile", "truthAfter24h", p.truthAfter24h, "optional") + "</div>" +
+        '<div class="section-block"><div class="field-label">When activated, what do you do that you regret later?</div>' + textareaField("profile", "regretAction", p.regretAction, "e.g. send the text immediately", 3) + "</div>" +
+        '<div class="section-block"><div class="field-label">What\'s true 24 hours later that wasn\'t obvious in the moment?</div>' + textareaField("profile", "truthAfter24h", p.truthAfter24h, "optional", 3) + "</div>" +
         '<div class="section-block"><div class="field-label">What has to be true for something to actually require action?</div>' + tagList("profile", "whatMustBeTrue", p.whatMustBeTrue, { placeholder: "e.g. it affects my safety" }) + "</div>" +
-        '<div class="section-block"><div class="field-label">Your rule before you respond to anything that stings</div>' + textField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "e.g. wait 1 hour") + "</div>";
+        '<div class="section-block"><div class="field-label">Your rule before you respond to anything that stings</div>' + textareaField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "e.g. wait 1 hour", 3) + "</div>";
     } else if (step === "done") {
       body =
         '<div class="home-hero">' +
@@ -429,12 +429,24 @@
     html += '<div class="settings-section-title">Situations that hook me</div>' + tagList("profile", "triggerCategories", p.triggerCategories, { placeholder: "add one" });
     html += '<div class="settings-section-title">Deserves my energy</div>' + tagList("profile", "energyWorthy", p.energyWorthy, { placeholder: "add one" });
     html += '<div class="settings-section-title">Does NOT deserve my energy</div>' + tagList("profile", "energyNotWorthy", p.energyNotWorthy, { placeholder: "add one" });
-    html += '<div class="settings-section-title">My rule before I respond</div>' + textField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "");
+    html += '<div class="settings-section-title">What must be true to require action</div>' + tagList("profile", "whatMustBeTrue", p.whatMustBeTrue, { placeholder: "add one" });
+
+    html += '<div class="settings-section-title">Whose opinion I give too much power to</div>' + textareaField("profile", "whoseOpinion", p.whoseOpinion, "optional", 3);
+    html += '<div class="settings-section-title">The story I tell myself when disrespected</div>' + textareaField("profile", "storyWhenDisrespected", p.storyWhenDisrespected, "optional", 3);
+    html += '<div class="settings-section-title">A decision-worthy problem</div>' + textareaField("profile", "decisionWorthyExample", p.decisionWorthyExample, "optional", 3);
+    html += '<div class="settings-section-title">What I regret doing when activated</div>' + textareaField("profile", "regretAction", p.regretAction, "optional", 3);
+    html += '<div class="settings-section-title">What\'s true 24 hours later</div>' + textareaField("profile", "truthAfter24h", p.truthAfter24h, "optional", 3);
+    html += '<div class="settings-section-title">My rule before I respond</div>' + textareaField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "", 3);
 
     html += '<div class="settings-section-title">Decode (AI)</div>' +
       '<p class="field-hint">Free API key from console.groq.com/keys — stored only on this device.</p>' +
       textField("profile", "groqApiKey", p.groqApiKey, "gsk_...") +
       '<div style="margin-top:10px">' + textField("profile", "groqModel", p.groqModel, "llama-3.3-70b-versatile") + "</div>";
+
+    html += '<div class="settings-section-title">Backup</div>' +
+      '<p class="field-hint">Move your values to another device (like your phone) without retyping.</p>' +
+      '<div class="btn-row"><button class="btn btn-secondary" data-action="export-data">Copy my data</button>' +
+      '<button class="btn btn-secondary" data-action="import-data">Import from clipboard</button></div>';
 
     html += '<div class="settings-section-title">Data</div>' +
       '<button class="btn btn-danger" data-action="clear-data">Erase all my data on this device</button>';
@@ -953,6 +965,37 @@
       if (text && !state.decode.loading) {
         state.decode.input = "";
         sendDecodeMessage(text);
+      }
+    } else if (action === "export-data") {
+      var exportJson = JSON.stringify(state.profile);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(exportJson).then(function () {
+          window.alert("Copied. On your other device, open this app, go to Settings, and tap Import from clipboard.");
+        }).catch(function () { window.prompt("Copy this text:", exportJson); });
+      } else {
+        window.prompt("Copy this text:", exportJson);
+      }
+    } else if (action === "import-data") {
+      var applyImport = function (text) {
+        try {
+          var parsed = JSON.parse(text);
+          state.profile = Object.assign(defaultProfile(), parsed);
+          state.profile.onboarded = true;
+          saveProfile();
+          render();
+          window.alert("Imported.");
+        } catch (e) {
+          window.alert("That didn't look like valid SHIFT data.");
+        }
+      };
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(applyImport).catch(function () {
+          var text = window.prompt("Paste your SHIFT data:");
+          if (text) applyImport(text);
+        });
+      } else {
+        var text2 = window.prompt("Paste your SHIFT data:");
+        if (text2) applyImport(text2);
       }
     } else if (action === "clear-data") {
       if (window.confirm("This permanently erases everything on this device. Continue?")) {

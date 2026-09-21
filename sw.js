@@ -1,4 +1,4 @@
-var CACHE_NAME = "shift-v1";
+var CACHE_NAME = "shift-v2";
 var ASSETS = [
   "./",
   "./index.html",
@@ -26,17 +26,14 @@ self.addEventListener("activate", function (e) {
 self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
   e.respondWith(
-    caches.match(e.request).then(function (cached) {
-      var network = fetch(e.request)
-        .then(function (res) {
-          if (res && res.status === 200) {
-            var copy = res.clone();
-            caches.open(CACHE_NAME).then(function (cache) { cache.put(e.request, copy); });
-          }
-          return res;
-        })
-        .catch(function () { return cached; });
-      return cached || network;
-    })
+    fetch(e.request)
+      .then(function (res) {
+        if (res && res.status === 200) {
+          var copy = res.clone();
+          caches.open(CACHE_NAME).then(function (cache) { cache.put(e.request, copy); });
+        }
+        return res;
+      })
+      .catch(function () { return caches.match(e.request); })
   );
 });
