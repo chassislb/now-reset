@@ -91,13 +91,15 @@
     rec.lang = navigator.language || "en-US";
     rec.continuous = true;
     rec.interimResults = true;
+    // Only ever carry forward CONFIRMED final text across a restart. If we
+    // carried forward the displayed value (which can include an unconfirmed
+    // interim guess at the exact moment of restart), the next session would
+    // often re-hear and re-finalize that same tail end, duplicating it.
+    var confirmedText = priorText ? priorText.replace(/\s+$/, "") : "";
     rec.onstart = function () {
       document.querySelectorAll('.mic-btn[data-target="' + targetId + '"]').forEach(function (b) { b.classList.add("listening"); });
     };
     rec.onresult = function (e) {
-      // Rebuild from scratch every event instead of trusting resultIndex across
-      // events: Android's recognizer restarts sessions frequently and can
-      // redeliver already-final results, which caused duplicated/garbled text.
       var finalText = "";
       var interim = "";
       for (var i = 0; i < e.results.length; i++) {
@@ -105,9 +107,8 @@
         if (e.results[i].isFinal) finalText += (finalText ? " " : "") + transcript.trim();
         else interim += transcript;
       }
-      var base = priorText ? priorText.replace(/\s+$/, "") : "";
-      if (finalText) base = (base ? base + " " : "") + finalText;
-      setFieldValue(el, base + (interim ? (base ? " " : "") + interim : ""));
+      if (finalText) confirmedText = (confirmedText ? confirmedText + " " : "") + finalText;
+      setFieldValue(el, confirmedText + (interim ? (confirmedText ? " " : "") + interim : ""));
     };
     rec.onerror = function (e) {
       if (e.error !== "no-speech" && e.error !== "aborted") state.mic.manualStop = true;
@@ -119,8 +120,8 @@
       }
       // Android's recognizer times out after a few seconds of silence even
       // with continuous:true. Seamlessly resume instead of stopping on the
-      // user, carrying forward whatever's already in the field.
-      startMicSession(targetId, el, el.value);
+      // user, carrying forward only what was actually confirmed.
+      startMicSession(targetId, el, confirmedText);
     };
     state.mic.recognition = rec;
     state.mic.targetId = targetId;
@@ -567,7 +568,8 @@
       "Tone: warm and human, not clinical. One brief line of real acknowledgment is fine — not repeated, not performative reassurance.",
       "Length: a few tight sentences per reply, rarely a short paragraph. Never long essays.",
       "Ground every reply in THEIR stated values/boundaries/identity below, referencing them naturally, not generic advice.",
-      "LOOPING: You receive the full conversation each time. If their latest message repeats the same complaint, feeling, or story without adding a genuinely new fact or question, they are looping — the information ceiling has been reached. When that happens, stop analyzing and stop asking questions. Give ONE short, firm statement that names the loop plainly (e.g. \"We've covered this part\"), reflects who they've decided to be, and redirects them back to the present moment or the one decision in front of them. Do not continue probing after that.",
+      "SPECIFIC QUESTIONS: If their latest message asks a real question, or is stuck on something and wants help thinking it through — even about a topic already touched on — actually engage with it. Give them a real, direct answer or perspective. Do not deflect a genuine question by claiming it's already covered.",
+      "LOOPING: Separately, if their latest message just repeats the same complaint, feeling, or story again with no new fact and no question — pure rehashing/venting on a loop — that's different from a question, and that's when you redirect. Do it warmly, like a therapist would, not as a flat cutoff: briefly acknowledge it (\"I know we've been here\" / \"I hear this one keeps coming back\"), then name what's actually happening underneath in one honest sentence (e.g. \"you're spiraling on something in the future you're not even sure will happen\" or \"you're trying to control how they see you, and that's not something you can actually control\"), then invite them back to the present or the one decision in front of them. Never just say a bare line like \"we've covered this part\" and stop — always pair the redirect with that one sentence of real reframing. Still keep it short: two to three sentences, not a new analysis.",
       "Never diagnose any person, including third parties they describe, and never give clinical/medical advice.",
       "If they describe a real, current safety threat to themselves, name that plainly once and suggest contacting local emergency services or a crisis line, briefly, without lecturing.",
       "",
@@ -613,6 +615,13 @@
     ].join("\n");
   }
 
+  function friendlyApiError(status, rawText) {
+    if (status === 429) return "You've hit Groq's free-tier rate limit for this model for now. Wait a few minutes and try again, or switch models in Settings → Decode (AI).";
+    if (status === 401) return "Groq rejected the API key. Check it's pasted correctly in Settings → Decode (AI).";
+    if (status === 404) return "That model isn't available on Groq right now. Check the model name in Settings → Decode (AI).";
+    return "Groq API error " + status + ": " + rawText.slice(0, 200);
+  }
+
   function requestScript() {
     var r = state.reset, p = state.profile;
     r.scriptLoading = true;
@@ -637,7 +646,7 @@
     })
       .then(function (res) {
         if (!res.ok) {
-          return res.text().then(function (t) { throw new Error("API error " + res.status + ": " + t.slice(0, 200)); });
+          return res.text().then(function (t) { throw new Error(friendlyApiError(res.status, t)); });
         }
         return res.json();
       })
@@ -719,7 +728,7 @@
       .then(function (res) {
         if (!res.ok) {
           return res.text().then(function (t) {
-            throw new Error("API error " + res.status + ": " + t.slice(0, 200));
+            throw new Error(friendlyApiError(res.status, t));
           });
         }
         return res.json();
