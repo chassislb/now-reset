@@ -149,8 +149,26 @@
     }
   }
 
+  var saveToastTimer = null;
+  function showSavedToast() {
+    var el = document.getElementById("saved-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "saved-toast";
+      el.className = "saved-toast";
+      el.textContent = "Saved";
+      document.body.appendChild(el);
+    }
+    el.classList.add("show");
+    clearTimeout(saveToastTimer);
+    saveToastTimer = setTimeout(function () { el.classList.remove("show"); }, 900);
+  }
+
   function saveProfile() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.profile)); } catch (e) {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.profile));
+      showSavedToast();
+    } catch (e) {}
   }
 
   var ONBOARD_STEPS = ["intro", "identity-1", "identity-2", "values", "boundaries-1", "boundaries-2", "traps-1", "traps-2", "energy", "rules", "done"];
@@ -440,9 +458,12 @@
     html += '<div class="settings-section-title">My rule before I respond</div>' + textareaField("profile", "ruleBeforeResponding", p.ruleBeforeResponding, "", 3);
 
     html += '<div class="settings-section-title">Decode (AI)</div>' +
-      '<p class="field-hint">Free API key from console.groq.com/keys — stored only on this device.</p>' +
+      '<div class="field-label">API key</div>' +
+      '<p class="field-hint">Free, from console.groq.com/keys — stored only on this device. This is the only field you need to fill in here.</p>' +
       textField("profile", "groqApiKey", p.groqApiKey, "gsk_...") +
-      '<div style="margin-top:10px">' + textField("profile", "groqModel", p.groqModel, "openai/gpt-oss-20b") + "</div>";
+      '<div class="field-label" style="margin-top:14px">AI model (advanced — leave as-is)</div>' +
+      '<p class="field-hint">Not a key. Only change this if you know a specific Groq model name you want instead.</p>' +
+      textField("profile", "groqModel", p.groqModel, "openai/gpt-oss-20b");
 
     html += '<div class="settings-section-title">Backup</div>' +
       '<p class="field-hint">Move your values to another device (like your phone) without retyping.</p>' +

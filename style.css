@@ -483,6 +483,29 @@ textarea:focus, input[type=text]:focus { outline: 2px solid var(--accent-dim); }
   margin-bottom: 18px;
 }
 
+.saved-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--accent);
+  color: #04201d;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 100;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.saved-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .empty-state {
   color: var(--muted);
   font-size: 14px;
