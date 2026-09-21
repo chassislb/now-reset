@@ -51,6 +51,59 @@
 
   var PATTERN_UNLOCK = 10;
 
+  var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function micButton(targetId) {
+    if (!SpeechRecognitionCtor) return "";
+    return '<button type="button" class="mic-btn" data-action="mic-toggle" data-target="' + targetId + '">🎤</button>';
+  }
+
+  function setFieldValue(el, value) {
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+    setter.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function stopMic() {
+    document.querySelectorAll(".mic-btn.listening").forEach(function (b) { b.classList.remove("listening"); });
+    state.mic.recognition = null;
+    state.mic.targetId = null;
+  }
+
+  function toggleMic(targetId) {
+    if (state.mic.recognition && state.mic.targetId === targetId) {
+      state.mic.recognition.stop();
+      return;
+    }
+    if (state.mic.recognition) state.mic.recognition.stop();
+    var el = document.getElementById(targetId);
+    if (!el) return;
+    var baseText = el.value;
+    var rec = new SpeechRecognitionCtor();
+    rec.lang = navigator.language || "en-US";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onstart = function () {
+      document.querySelectorAll('.mic-btn[data-target="' + targetId + '"]').forEach(function (b) { b.classList.add("listening"); });
+    };
+    rec.onresult = function (e) {
+      var finalText = "";
+      var interim = "";
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += transcript;
+        else interim += transcript;
+      }
+      if (finalText) baseText = (baseText ? baseText.replace(/\s+$/, "") + " " : "") + finalText.trim();
+      setFieldValue(el, baseText + (interim ? (baseText ? " " : "") + interim : ""));
+    };
+    rec.onerror = function () { stopMic(); };
+    rec.onend = function () { stopMic(); };
+    state.mic.recognition = rec;
+    state.mic.targetId = targetId;
+    rec.start();
+  }
+
   function defaultProfile() {
     return {
       onboarded: false,
@@ -108,7 +161,8 @@
     onboardIndex: 0,
     reset: null,
     timerHandle: null,
-    decode: null
+    decode: null,
+    mic: { recognition: null, targetId: null }
   };
 
   if (!state.profile.onboarded) state.screen = "onboarding";
@@ -161,7 +215,8 @@
   }
 
   function textareaField(scope, field, value, placeholder, rows) {
-    return '<textarea rows="' + (rows || 3) + '" data-scope="' + scope + '" data-field="' + field + '" data-action="text-input" placeholder="' + esc(placeholder || "") + '">' + esc(value || "") + "</textarea>";
+    var id = "ta_" + scope + "_" + field;
+    return '<div class="textarea-wrap"><textarea id="' + id + '" rows="' + (rows || 3) + '" data-scope="' + scope + '" data-field="' + field + '" data-action="text-input" placeholder="' + esc(placeholder || "") + '">' + esc(value || "") + "</textarea>" + micButton(id) + "</div>";
   }
 
   function getScopeObj(scope) {
@@ -506,6 +561,7 @@
 
     html += '<div class="chat-input-row">' +
       '<textarea rows="2" id="decode-input" placeholder="Type here…">' + esc(d.input || "") + "</textarea>" +
+      micButton("decode-input") +
       '<button class="addbtn" data-action="decode-send" ' + (d.loading ? "disabled" : "") + ">↑</button>" +
       "</div>";
 
@@ -785,6 +841,8 @@
       state.screen = "identity"; render();
     } else if (action === "open-patterns") {
       state.screen = "patterns"; render();
+    } else if (action === "mic-toggle") {
+      toggleMic(t.dataset.target);
     } else if (action === "open-decode") {
       openDecode();
     } else if (action === "decode-new") {
